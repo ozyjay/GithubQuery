@@ -4,18 +4,61 @@ import com.opencsv.CSVReader;
 
 import javax.net.ssl.HttpsURLConnection;
 import java.io.FileReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.rmi.server.ExportException;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class App {
+
+    private static String fetch(String urlAddress) throws IOException {
+        String regex = "<(.+&page=\\d+)>; rel=\"next\".+";
+        Pattern pattern = Pattern.compile(regex);
+        String pageLink = urlAddress;
+        StringBuilder builder = new StringBuilder();
+
+        while (true) {
+            URL url = new URL(pageLink);
+            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+            String linkData = connection.getHeaderField("Link");
+
+            Scanner scanner = new Scanner(connection.getInputStream());
+            while (scanner.hasNextLine()) {
+                builder.append(scanner.nextLine());
+            }
+            scanner.close();
+
+            System.out.println("builder: " + builder);
+
+            if (linkData == null) {
+                break;
+            }
+
+//            System.out.println("linkData:" + linkData);
+
+            Matcher matcher = pattern.matcher(linkData);
+            if (matcher.matches()) {
+                pageLink = matcher.group(1);
+            } else {
+                break;
+            }
+
+        }
+        System.out.println("done");
+        return builder.toString().replaceAll("]\\[",",");
+    }
+
     public static void main(String[] args) {
         try {
 
             CSVReader reader = new CSVReader(new FileReader("resources/repos.csv"));
-            final String TOKEN = "db95460bcf441e12ffa610950d627655f39c51a9";
+            final String TOKEN = "7cf44938f02ba95c1b757b8ff36b7b3287235ee8";
 
             Map<String, String> repos = new Hashtable<>();
             List<String[]> reposList = reader.readAll();
@@ -27,27 +70,34 @@ public class App {
 
             repos.forEach((repoName, owner) -> {
                 try {
-                    URL url = new URL(String.format("https://api.github.com/repos/%s/%s/commits?access_token=%s", owner, repoName, TOKEN));
-                    HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-
-                    String link = connection.getHeaderField("Link");
-                    System.out.println(link);
-
-
+                    System.out.println(String.format("processing repo %s owner %s...",repoName, owner));
+                    String repoURL = String.format("https://api.github.com/repos/%s/%s/commits?access_token=%s", owner, repoName, TOKEN);
+                    String repoResults = fetch(repoURL);
                     JsonParser parser = new JsonParser();
-                    InputStreamReader results = new InputStreamReader(connection.getInputStream());
-                    JsonElement element = parser.parse(results);
+                    JsonElement repoJSON = parser.parse(repoResults);
 
-                    element.asArray().forEach((commit) -> {
-                        commit.asObject().forEach((commitKey, commitValue) -> {
-                            if (commitKey.equals("commit")) {
-                                commitValue.asObject().forEach((n, v) -> {
-                                    System.out.print(n);
-                                    System.out.print(" ");
+                    repoJSON.asArray().forEach((repo) -> {
+                        try {
+                            String commitURL = repo.asObject().get("url").toString();
+                            String commitResults = fetch(String.format("%s?access_token=%s", commitURL, TOKEN));
+                            JsonElement commitJSON = parser.parse(commitResults);
+                            if (commitJSON.isArray()) {
+                                commitJSON.asArray().forEach((commit) -> {
+                                    System.out.println(commit.asObject().get("files").toString());
                                 });
+                            } else {
+                                JsonElement filesJSON = commitJSON.asObject().get("files");
+                                if (filesJSON.isArray()) {
+                                    filesJSON.asArray().forEach((file) -> {
+                                        System.out.println(file.asObject().get("filename"));
+                                    });
+                                } else {
+                                    System.out.println(filesJSON.asObject().get("filename"));
+                                }
                             }
-                        });
-                        System.out.println();
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
                     });
 
                 } catch (Exception e) {
