@@ -5,7 +5,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.Assert.*;
 
-public class MultipageFetcherTest {
+public class MultiPageFetcherTest {
     @Test
     public void testURLReg() throws Exception {
         String data = "<https://api.github.com/repositories/943149/commits?access_token=7cf44938f02ba95c1b757b8ff36b7b3287235ee8&page=2>; rel=\"next\"";
