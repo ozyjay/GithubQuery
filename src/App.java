@@ -1,107 +1,109 @@
-import com.github.jsonj.JsonElement;
-import com.github.jsonj.tools.JsonParser;
-import com.opencsv.CSVReader;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import utility.Fetch;
+import utility.Logger;
 
-import javax.net.ssl.HttpsURLConnection;
-import java.io.FileReader;
 import java.io.IOException;
-import java.net.URL;
-import java.util.Hashtable;
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 class App {
-
-    private static String fetch(String urlAddress) throws IOException {
-        String regex = "<(.+&page=\\d+)>; rel=\"next\".+";
-        Pattern pattern = Pattern.compile(regex);
-        String pageLink = urlAddress;
-        StringBuilder builder = new StringBuilder();
-
-        while (true) {
-            URL url = new URL(pageLink);
-            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-            String linkData = connection.getHeaderField("Link");
-
-            Scanner scanner = new Scanner(connection.getInputStream());
-            while (scanner.hasNextLine()) {
-                builder.append(scanner.nextLine());
-            }
-            scanner.close();
-
-            System.out.println("builder: " + builder);
-
-            if (linkData == null) {
-                break;
-            }
-
-//            System.out.println("linkData:" + linkData);
-
-            Matcher matcher = pattern.matcher(linkData);
-            if (matcher.matches()) {
-                pageLink = matcher.group(1);
-            } else {
-                break;
-            }
-
-        }
-        System.out.println("done");
-        return builder.toString().replaceAll("]\\[", ",");
-    }
+    private static final String TOKEN = "7cf44938f02ba95c1b757b8ff36b7b3287235ee8";
 
     public static void main(String[] args) {
 
-        Map<String, String> repos = new Hashtable<>();
-        try {
-            CSVReader reader = new CSVReader(new FileReader("resources/repos.csv"));
-
-            List<String[]> reposList = reader.readAll();
-            for (String[] repo : reposList) {
-                String owner = repo[0];
-                String repoName = repo[1];
-                repos.put(repoName, owner);
-            }
-
+        try (Logger logger = Logger.getInstance()) {
+            logger.log("date,committer,owner,message,additions,deletions,changes");
+            Fetch.repos().forEach(App::processRepo);
         } catch (Exception e) {
-            System.out.println(e.toString());
+            e.printStackTrace();
         }
+    }
+
+    private static Record record = new Record();
+
+    private static void processRepo(JsonElement element) {
+        JsonObject repo = element.getAsJsonObject();
+
+        System.out.println("processing " + repo);
 
         final String URL_TEMPLATE = "https://api.github.com/repos/%s/%s/commits?access_token=%s";
-        final String TOKEN = "7cf44938f02ba95c1b757b8ff36b7b3287235ee8";
-        repos.forEach((repoName, owner) -> {
-            try {
-                System.out.println(String.format("processing repo %s owner %s...", repoName, owner));
-                String repoURL = String.format(URL_TEMPLATE, owner, repoName, TOKEN);
-                String repoResults = fetch(repoURL);
-                JsonParser parser = new JsonParser();
-                JsonElement repoJSON = parser.parse(repoResults);
 
-                repoJSON.asArray().forEach((repo) -> {
-                    try {
-                        String commitURL = repo.asObject().get("url").toString();
-                        String commitResults = fetch(String.format("%s?access_token=%s", commitURL, TOKEN));
-                        JsonElement commitJSON = parser.parse(commitResults);
-                        if (commitJSON.isArray()) {
-                            commitJSON.asArray().forEach((commit) -> System.out.println(commit.asObject().get("files").toString()));
+        String owner = repo.get("owner").getAsString();
+        String name = repo.get("name").getAsString();
+
+        record.owner = repo.get("owner").getAsString();
+
+        String commitsURL = String.format(URL_TEMPLATE, owner, name, TOKEN);
+        try {
+            Fetch.multipage(commitsURL).forEach(App::processCommitDetails);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void processCommitDetails(JsonElement element) {
+        JsonObject details = element.getAsJsonObject();
+        JsonObject commit = details.getAsJsonObject("commit");
+        record.message = escapify(commit.get("message").getAsString());
+
+        JsonObject committer = commit.getAsJsonObject("committer");
+        record.committer = committer.get("name").getAsString();
+        record.date = committer.get("date").getAsString();
+
+        String commitURL = String.format("%s?access_token=%s", details.get("url").getAsString(), TOKEN);
+        try {
+            JsonElement files = Fetch.page(commitURL).get("files");
+            files.getAsJsonArray().forEach(App::processFile);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // convert newlines, tabs, and comma's into spaces
+    // convert double-quote into single-quote
+    // ignore carriage return
+    private static String escapify(String message) {
+        StringBuilder builder = new StringBuilder();
+
+        for (int i = 0; i < message.length(); ++i) {
+            char ch = message.charAt(i);
+            switch (ch) {
+                case '\t':
+                case '\n':
+                case ',':
+                    builder.append(' ');
+                    for (int j = i + 1; j < message.length(); ++j) {
+                        if (Character.isWhitespace(message.charAt(j))) {
+                            i = j;
                         } else {
-                            JsonElement filesJSON = commitJSON.asObject().get("files");
-                            if (filesJSON.isArray()) {
-                                filesJSON.asArray().forEach((file) -> System.out.println(file.asObject().get("filename")));
-                            } else {
-                                System.out.println(filesJSON.asObject().get("filename"));
-                            }
+                            break;
                         }
-                    } catch (Exception e) {
-                        e.printStackTrace();
                     }
-                });
+                    break;
+                case '\r':
+                    break;
+                case '"':
+                    builder.append("'");
+                    break;
+                default:
+                    builder.append(ch);
+            }
+        }
 
-            } catch (Exception e) {
+        return builder.toString();
+    }
+
+    private static void processFile(JsonElement element) {
+        JsonObject file = element.getAsJsonObject();
+        if (file.get("filename").getAsString().toLowerCase().contains("readme.md")) {
+            record.additions = file.get("additions").getAsInt();
+            record.deletions = file.get("deletions").getAsInt();
+            record.changes = file.get("changes").getAsInt();
+            try {
+                System.out.println(record);
+                Logger.getInstance().log(record.toString());
+            } catch (IOException e) {
                 e.printStackTrace();
             }
-        });
+        }
     }
 }
