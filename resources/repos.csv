@@ -1,5 +1,3 @@
-vuejs,vuex
-twbs,bootstrap
 angular,angular.js
 udacity,frontend-nanodegree-resume
 d3,d3
@@ -98,3 +96,4 @@ wagerfield,parallax
 blasten,turn.js
 silviomoreto,bootstrap-select
 rstudio,shiny-examples
+twbs,bootstrap

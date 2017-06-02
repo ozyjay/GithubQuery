@@ -10,6 +10,8 @@ class App {
 
     public static void main(String[] args) {
 
+        Fetch.waitUntilReady(TOKEN);
+
         try (Logger logger = Logger.getInstance()) {
             logger.log("date,committer,owner,message,additions,deletions,changes");
             Fetch.repos().forEach(App::processRepo);
@@ -19,10 +21,13 @@ class App {
     }
 
     private static Record record = new Record();
+    private static int count = 0;
 
     private static void processRepo(JsonElement element) {
         JsonObject repo = element.getAsJsonObject();
 
+        count += 1;
+        System.out.println("Count: " + count);
         System.out.println("processing " + repo);
 
         final String URL_TEMPLATE = "https://api.github.com/repos/%s/%s/commits?access_token=%s";
@@ -33,10 +38,17 @@ class App {
         record.owner = repo.get("owner").getAsString();
 
         String commitsURL = String.format(URL_TEMPLATE, owner, name, TOKEN);
-        try {
-            Fetch.multipage(commitsURL).forEach(App::processCommitDetails);
-        } catch (IOException e) {
-            e.printStackTrace();
+        while (true) {
+            try {
+                Fetch.multipage(commitsURL).forEach(App::processCommitDetails);
+                break;
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                System.out.println("failed to fetch " + commitsURL);
+
+                Fetch.waitUntilReady(TOKEN);
+            }
         }
     }
 
@@ -49,12 +61,19 @@ class App {
         record.committer = committer.get("name").getAsString();
         record.date = committer.get("date").getAsString();
 
-        String commitURL = String.format("%s?access_token=%s", details.get("url").getAsString(), TOKEN);
-        try {
-            JsonElement files = Fetch.page(commitURL).get("files");
-            files.getAsJsonArray().forEach(App::processFile);
-        } catch (IOException e) {
-            e.printStackTrace();
+        while (true) {
+            String commitURL = String.format("%s?access_token=%s", details.get("url").getAsString(), TOKEN);
+            try {
+                JsonElement files = Fetch.page(commitURL).get("files");
+                files.getAsJsonArray().forEach(App::processFile);
+                break;
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                System.out.println("failed to fetch " + commitURL);
+
+                Fetch.waitUntilReady(TOKEN);
+            }
         }
     }
 

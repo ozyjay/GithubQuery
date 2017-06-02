@@ -11,6 +11,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.util.Date;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -23,6 +24,9 @@ public class Fetch {
         HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
 
         JsonElement result = parser.parse(new InputStreamReader(connection.getInputStream()));
+
+        pauseIfNecessary(connection);
+
         return result.getAsJsonObject();
     }
 
@@ -44,6 +48,8 @@ public class Fetch {
             JsonElement result = parser.parse(new InputStreamReader(connection.getInputStream()));
             results.addAll(result.getAsJsonArray());
 
+            pauseIfNecessary(connection);
+
             Matcher matcher = pattern.matcher(linkData);
             if (matcher.matches()) {
                 pageLink = matcher.group(1);
@@ -53,6 +59,51 @@ public class Fetch {
         }
 
         return results;
+    }
+
+    private static void pauseIfNecessary(HttpsURLConnection connection) {
+        String remainingData = connection.getHeaderField("X-RateLimit-Remaining");
+        int remainingCount = Integer.parseInt(remainingData);
+        System.out.println("fetching... remaining fetches before pause: " + remainingCount);
+
+        if (remainingCount == 0) {
+            String resetTimeData = connection.getHeaderField("X-RateLimit-Reset");
+            long resetTime = Long.parseLong(resetTimeData) * 1000;
+            pause(resetTime);
+        }
+    }
+
+    public static void waitUntilReady(final String TOKEN) {
+        try {
+            String urlAddress = String.format("https://api.github.com/rate_limit?access_token=%s", TOKEN);
+            URL url = new URL(urlAddress);
+            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+            JsonElement result = parser.parse(new InputStreamReader(connection.getInputStream()));
+
+            JsonObject rate = result.getAsJsonObject().getAsJsonObject("rate");
+            int remainingCount = rate.get("remaining").getAsInt();
+
+            if (remainingCount == 0) {
+                long resetTime = rate.get("reset").getAsLong() * 1000;
+                pause(resetTime);
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void pause(long resetTime) {
+        Date now = new Date();
+        long sleepDuration = resetTime - now.getTime() + 1000 * 10;
+
+        System.out.print(String.format("pausing until %s zzzzzz.....", new Date(resetTime)));
+        try {
+            Thread.sleep(sleepDuration);
+        } catch (InterruptedException e) {
+            System.out.println("aborted pause!");
+        }
+        System.out.println("done!");
     }
 
     public static JsonArray repos() throws IOException {
