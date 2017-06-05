@@ -74,22 +74,26 @@ public class Fetch {
     }
 
     public static void waitUntilReady(final String TOKEN) {
-        try {
-            String urlAddress = String.format("https://api.github.com/rate_limit?access_token=%s", TOKEN);
-            URL url = new URL(urlAddress);
-            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-            JsonElement result = parser.parse(new InputStreamReader(connection.getInputStream()));
+        while (true) {
+            try {
+                String urlAddress = String.format("https://api.github.com/rate_limit?access_token=%s", TOKEN);
+                URL url = new URL(urlAddress);
+                HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+                JsonElement result = parser.parse(new InputStreamReader(connection.getInputStream()));
 
-            JsonObject rate = result.getAsJsonObject().getAsJsonObject("rate");
-            int remainingCount = rate.get("remaining").getAsInt();
+                JsonObject rate = result.getAsJsonObject().getAsJsonObject("rate");
+                int remainingCount = rate.get("remaining").getAsInt();
 
-            if (remainingCount == 0) {
-                long resetTime = rate.get("reset").getAsLong() * 1000;
-                pause(resetTime);
+                if (remainingCount == 0) {
+                    long resetTime = rate.get("reset").getAsLong() * 1000;
+                    pause(resetTime);
+                }
+
+                break;
+
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 

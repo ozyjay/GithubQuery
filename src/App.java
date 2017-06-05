@@ -3,8 +3,6 @@ import com.google.gson.JsonObject;
 import utility.Fetch;
 import utility.Logger;
 
-import java.io.IOException;
-
 class App {
     private static final String TOKEN = "7cf44938f02ba95c1b757b8ff36b7b3287235ee8";
 
@@ -15,6 +13,7 @@ class App {
         try (Logger logger = Logger.getInstance()) {
             logger.log("date,committer,owner,message,additions,deletions,changes");
             Fetch.repos().forEach(App::processRepo);
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -43,7 +42,7 @@ class App {
                 Fetch.multipage(commitsURL).forEach(App::processCommitDetails);
                 break;
 
-            } catch (IOException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
                 System.out.println("failed to fetch " + commitsURL);
 
@@ -68,7 +67,7 @@ class App {
                 files.getAsJsonArray().forEach(App::processFile);
                 break;
 
-            } catch (IOException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
                 System.out.println("failed to fetch " + commitURL);
 
@@ -120,7 +119,8 @@ class App {
             try {
                 System.out.println(record);
                 Logger.getInstance().log(record.toString());
-            } catch (IOException e) {
+
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
