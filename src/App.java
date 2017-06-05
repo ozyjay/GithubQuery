@@ -57,7 +57,7 @@ class App {
         record.message = escapify(commit.get("message").getAsString());
 
         JsonObject committer = commit.getAsJsonObject("committer");
-        record.committer = committer.get("name").getAsString();
+        record.committer = escapify(committer.get("name").getAsString());
         record.date = committer.get("date").getAsString();
 
         while (true) {
