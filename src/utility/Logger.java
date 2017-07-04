@@ -5,31 +5,46 @@ import com.opencsv.CSVWriter;
 import java.io.Closeable;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Logger implements Closeable {
-    private CSVWriter csvWriter;
-
+    private static Map<String, CSVWriter> logs;
+    private static CSVWriter currentWriter;
     private static Logger instance;
 
-    public static Logger getInstance() throws IOException {
+    private Logger() {
+        logs = new HashMap<>();
+    }
+
+    public static Logger getInstance() {
         if (instance == null) {
             instance = new Logger();
         }
         return instance;
     }
 
-    private Logger() throws IOException {
-        FileWriter fileWriter = new FileWriter("resources/results.csv");
-        csvWriter = new CSVWriter(fileWriter);
+    public Logger with(String name) {
+        currentWriter = logs.get(name);
+        return instance;
     }
 
     public void log(String data) throws IOException {
-        csvWriter.writeNext(data.split(","));
-        csvWriter.flush();
+        if (currentWriter == null) return;
+
+        currentWriter.writeNext(data.split(","));
+        currentWriter.flush();
     }
 
     @Override
     public void close() throws IOException {
-        csvWriter.close();
+        for (CSVWriter writer : logs.values())
+            writer.close();
+    }
+
+    public void create(String logger, String filename) throws IOException {
+        FileWriter fileWriter = new FileWriter(filename);
+        CSVWriter csvWriter = new CSVWriter(fileWriter);
+        logs.put(logger, csvWriter);
     }
 }

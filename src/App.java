@@ -1,18 +1,22 @@
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import utility.Fetch;
 import utility.Logger;
 
+import java.util.*;
+
 class App {
-    private static final String TOKEN = "7cf44938f02ba95c1b757b8ff36b7b3287235ee8";
 
     public static void main(String[] args) {
 
-        Fetch.waitUntilReady(TOKEN);
+        Fetch.waitUntilReady(Token.value);
 
         try (Logger logger = Logger.getInstance()) {
-            logger.log("date,committer,owner,message,additions,deletions,changes");
-            Fetch.repos().forEach(App::processRepo);
+            logger.create("results", "resources/results.csv");
+            logger.with("results").log("date,committer,owner,message,additions,deletions,changes");
+
+            Fetch.repos("resources/repos.csv").forEach(App::processRepo);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -34,19 +38,19 @@ class App {
         String owner = repo.get("owner").getAsString();
         String name = repo.get("name").getAsString();
 
-        record.owner = repo.get("owner").getAsString();
+        record.owner = owner;
 
-        String commitsURL = String.format(URL_TEMPLATE, owner, name, TOKEN);
+        String commitsURL = String.format(URL_TEMPLATE, owner, name, Token.value);
         while (true) {
             try {
                 Fetch.multipage(commitsURL).forEach(App::processCommitDetails);
-                break;
+                return;
 
             } catch (Exception e) {
                 e.printStackTrace();
                 System.out.println("failed to fetch " + commitsURL);
 
-                Fetch.waitUntilReady(TOKEN);
+                Fetch.waitUntilReady(Token.value);
             }
         }
     }
@@ -61,19 +65,37 @@ class App {
         record.date = committer.get("date").getAsString();
 
         while (true) {
-            String commitURL = String.format("%s?access_token=%s", details.get("url").getAsString(), TOKEN);
+            String commitURL = String.format("%s?access_token=%s", details.get("url").getAsString(), Token.value);
             try {
-                JsonElement files = Fetch.page(commitURL).get("files");
-                files.getAsJsonArray().forEach(App::processFile);
-                break;
+                JsonObject singleCommit = Fetch.page(commitURL).getAsJsonObject();
+
+                JsonObject stats = singleCommit.get("stats").getAsJsonObject();
+                record.additions = stats.get("additions").getAsInt();
+                record.deletions = stats.get("deletions").getAsInt();
+
+                JsonArray files = singleCommit.get("files").getAsJsonArray();
+                record.filenames = processFiles(files);
+
+                saveRecord();
+                return;
 
             } catch (Exception e) {
                 e.printStackTrace();
                 System.out.println("failed to fetch " + commitURL);
 
-                Fetch.waitUntilReady(TOKEN);
+                Fetch.waitUntilReady(Token.value);
             }
         }
+    }
+
+    private static String processFiles(JsonArray files) {
+        StringJoiner joiner = new StringJoiner(" ");
+
+        files.forEach(element -> {
+            joiner.add(element.getAsJsonObject().get("filename").getAsString());
+        });
+
+        return joiner.toString();
     }
 
     // convert newlines, tabs, and comma's into spaces
@@ -110,19 +132,13 @@ class App {
         return builder.toString();
     }
 
-    private static void processFile(JsonElement element) {
-        JsonObject file = element.getAsJsonObject();
-        if (file.get("filename").getAsString().toLowerCase().contains("readme.md")) {
-            record.additions = file.get("additions").getAsInt();
-            record.deletions = file.get("deletions").getAsInt();
-            record.changes = file.get("changes").getAsInt();
-            try {
-                System.out.println(record);
-                Logger.getInstance().log(record.toString());
+    private static void saveRecord() {
+        try {
+            System.out.println(record);
+            Logger.getInstance().with("results").log(record.toString());
 
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }

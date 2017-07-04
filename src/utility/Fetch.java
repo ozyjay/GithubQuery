@@ -110,10 +110,10 @@ public class Fetch {
         System.out.println("done!");
     }
 
-    public static JsonArray repos() throws IOException {
+    public static JsonArray repos(String filename) throws IOException {
         JsonArray repos = new JsonArray();
 
-        CSVReader csvReader = new CSVReader(new FileReader("resources/repos.csv"));
+        CSVReader csvReader = new CSVReader(new FileReader(filename));
         List<String[]> csvData = csvReader.readAll();
 
         csvData.forEach((entry) -> {
