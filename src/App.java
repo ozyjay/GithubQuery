@@ -91,9 +91,7 @@ class App {
     private static String processFiles(JsonArray files) {
         StringJoiner joiner = new StringJoiner(" ");
 
-        files.forEach(element -> {
-            joiner.add(element.getAsJsonObject().get("filename").getAsString());
-        });
+        files.forEach(element -> joiner.add(element.getAsJsonObject().get("filename").getAsString()));
 
         return joiner.toString();
     }
