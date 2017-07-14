@@ -30,6 +30,45 @@ public class Fetch {
         return result.getAsJsonObject();
     }
 
+    public static int count(String urlAddress) throws IOException {
+        JsonArray results = multipage(urlAddress);
+        return results.size();
+    }
+
+    public static JsonObject find(String urlAddress, String key, String value) throws IOException {
+        String regex = "<(.+&page=\\d+)>; rel=\"next\".+";
+        Pattern pattern = Pattern.compile(regex);
+
+        String pageLink = urlAddress;
+        while (true) {
+            URL url = new URL(pageLink);
+            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+            String linkData = connection.getHeaderField("Link");
+
+            JsonElement element = parser.parse(new InputStreamReader(connection.getInputStream()));
+            JsonArray data = element.getAsJsonArray();
+            for (JsonElement item : data) {
+                if (item.getAsJsonObject().get(key).getAsString().equals(value)) {
+                    return item.getAsJsonObject();
+                }
+            }
+
+            if (linkData == null) {
+                break;
+            }
+
+            pauseIfNecessary(connection);
+
+            Matcher matcher = pattern.matcher(linkData);
+            if (matcher.matches()) {
+                pageLink = matcher.group(1);
+            } else {
+                break; // all pages retrieved
+            }
+        }
+        return null;
+    }
+
     public static JsonArray multipage(String urlAddress) throws IOException {
         String regex = "<(.+&page=\\d+)>; rel=\"next\".+";
         Pattern pattern = Pattern.compile(regex);
@@ -41,12 +80,13 @@ public class Fetch {
             URL url = new URL(pageLink);
             HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
             String linkData = connection.getHeaderField("Link");
-            if (linkData == null) {
-                return results;
-            }
 
             JsonElement result = parser.parse(new InputStreamReader(connection.getInputStream()));
             results.addAll(result.getAsJsonArray());
+
+            if (linkData == null) {
+                return results;
+            }
 
             pauseIfNecessary(connection);
 
