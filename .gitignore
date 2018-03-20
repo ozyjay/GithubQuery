@@ -44,5 +44,4 @@ crashlytics.properties
 crashlytics-build.properties
 fabric.properties
 
-resources/results.csv
-/resources/repos.csv
+resources/

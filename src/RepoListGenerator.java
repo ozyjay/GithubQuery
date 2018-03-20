@@ -11,7 +11,7 @@ import java.util.Arrays;
 public class RepoListGenerator {
 
     private final static String[] validTypes = {"forks", "stars"};
-    private final static String[] validLanguages = {"java", "python", "c", "c#", "javascript"};
+    private final static String[] validLanguages = {"java", "python", "c", "c#", "javascript", "ruby"};
 
     public static void main(String[] args) {
 
@@ -20,20 +20,16 @@ public class RepoListGenerator {
         Fetch.waitUntilReady(Token.value);
 
         try (Logger logger = Logger.getInstance()) {
-            logger.create("repo", "resources/repos.csv");
-//            logger.with("repo").log("repoOwner,repoName");
-
             String type = args[0];
             String language = args[1];
             int count = Integer.parseInt(args[2]);
 
-//            final String URL_TEMPLATE = "https://api.github.com/search/repositories?q=%s:>1+language:%s" +
-//                    "&sort=%s&order=desc&type=repositories";
-            final String URL_TEMPLATE = "https://api.github.com/search/repositories?q=stars:>1+language:%s" +
-                    "&sort=%s&order=desc&type=repositories";
+            final String filename = String.format("resources/repos_%s_%s_%d.csv", type, language, count);
+            logger.create("repo", filename);
 
-//            String searchURL = String.format(URL_TEMPLATE, type, language, type);
-            String searchURL = String.format(URL_TEMPLATE, language, type);
+            final String URL_TEMPLATE = "https://api.github.com/search/repositories?q=%s:>1+language:%s" +
+                    "&sort=%s&order=desc&type=repositories";
+            String searchURL = String.format(URL_TEMPLATE, type, language, type);
             processSearch(searchURL, count);
 
         } catch (Exception e) {
@@ -58,13 +54,13 @@ public class RepoListGenerator {
         }
 
         if (!args[2].matches("\\d+")) {
-            System.out.println("the third parameter must be a whole number (1 - 200)");
+            System.out.println("the third parameter must be a whole number (1 - 500)");
             return true;
         }
 
         int value = Integer.parseInt(args[2]);
-        if (value < 1 && value > 200) {
-            System.out.println("the third parameter is not in the range (1-200)");
+        if (value < 1 || value > 500) {
+            System.out.println("the third parameter is not in the range (1-500)");
             return true;
         }
 
